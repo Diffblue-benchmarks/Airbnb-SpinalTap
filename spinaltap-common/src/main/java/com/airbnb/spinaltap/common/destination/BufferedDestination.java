@@ -72,7 +72,7 @@ public final class BufferedDestination extends ListenableDestination {
         return;
       }
 
-      Preconditions.checkState(destination.isStarted(), "Destination is not started!");
+      // Preconditions.checkState(destination.isStarted(), "Destination is not started!");
 
       final Stopwatch stopwatch = Stopwatch.createStarted();
       final Mutation.Metadata metadata = mutations.get(0).getMetadata();
@@ -145,7 +145,7 @@ public final class BufferedDestination extends ListenableDestination {
 
   @Override
   public boolean isStarted() {
-    return destination.isStarted() && isRunning();
+    return destination.isStarted();
   }
 
   @Override
@@ -163,7 +163,9 @@ public final class BufferedDestination extends ListenableDestination {
 
       consumer =
           Executors.newSingleThreadExecutor(
-              new ThreadFactoryBuilder().setNameFormat(name + "-buffered-destination-consumer").build());
+              new ThreadFactoryBuilder()
+                  .setNameFormat(name + "-buffered-destination-consumer")
+                  .build());
 
       consumer.execute(this::execute);
 

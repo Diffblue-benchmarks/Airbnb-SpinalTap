@@ -9,9 +9,8 @@ import com.airbnb.spinaltap.common.destination.Destination;
 import com.airbnb.spinaltap.common.source.Source;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -37,12 +36,12 @@ public class Pipe {
   private final Destination.Listener destinationListener = new DestinationListener();
 
   /** The checkpoint executor that periodically checkpoints the state of the source. */
-  private ScheduledExecutorService checkpointExecutor;
+  private ExecutorService checkpointExecutor;
 
   /**
    * The keep-alive executor that periodically checks the pipe is alive, and otherwise restarts it.
    */
-  private ScheduledExecutorService keepAliveExecutor;
+  private ExecutorService keepAliveExecutor;
 
   /** @return The name of the pipe. */
   public String getName() {
@@ -74,26 +73,38 @@ public class Pipe {
     }
 
     keepAliveExecutor =
-        Executors.newSingleThreadScheduledExecutor(
+        Executors.newSingleThreadExecutor(
             new ThreadFactoryBuilder()
                 .setNameFormat(getName() + "-pipe-keep-alive-executor")
                 .build());
 
-    keepAliveExecutor.scheduleAtFixedRate(
+    keepAliveExecutor.execute(
         () -> {
           try {
-            if (isStarted()) {
-              log.info("Pipe {} is alive", getName());
-            } else {
-              open();
-            }
-          } catch (Exception ex) {
-            log.error("Failed to open pipe " + getName(), ex);
+            Thread.sleep(EXECUTOR_DELAY_SECONDS * 1000);
+          } catch (InterruptedException ex) {
+            log.info("Keep-alive thread is interrupted.");
           }
-        },
-        EXECUTOR_DELAY_SECONDS,
-        KEEP_ALIVE_PERIOD_SECONDS,
-        TimeUnit.SECONDS);
+          if (keepAliveExecutor.isShutdown()) {
+            return;
+          }
+          while (!keepAliveExecutor.isShutdown()) {
+            try {
+              if (isStarted()) {
+                log.info("Pipe {} is alive", getName());
+              } else {
+                open();
+              }
+            } catch (Exception ex) {
+              log.error("Failed to open pipe " + getName(), ex);
+            }
+            try {
+              Thread.sleep(KEEP_ALIVE_PERIOD_SECONDS * 1000);
+            } catch (InterruptedException ex) {
+              log.info("Keep-alive thread is interrupted.");
+            }
+          }
+        });
   }
 
   private void scheduleCheckpointExecutor() {
@@ -108,17 +119,29 @@ public class Pipe {
                 .setNameFormat(getName() + "-pipe-checkpoint-executor")
                 .build());
 
-    checkpointExecutor.scheduleAtFixedRate(
+    checkpointExecutor.execute(
         () -> {
           try {
-            checkpoint();
-          } catch (Exception ex) {
-            log.error("Failed to checkpoint pipe " + getName(), ex);
+            Thread.sleep(EXECUTOR_DELAY_SECONDS * 1000);
+          } catch (InterruptedException ex) {
+            log.info("Checkpoint thread is interrupted.");
           }
-        },
-        EXECUTOR_DELAY_SECONDS,
-        CHECKPOINT_PERIOD_SECONDS,
-        TimeUnit.SECONDS);
+          if (checkpointExecutor.isShutdown()) {
+            return;
+          }
+          while (!checkpointExecutor.isShutdown()) {
+            try {
+              checkpoint();
+            } catch (Exception ex) {
+              log.error("Failed to checkpoint pipe " + getName(), ex);
+            }
+            try {
+              Thread.sleep(CHECKPOINT_PERIOD_SECONDS * 1000);
+            } catch (InterruptedException ex) {
+              log.info("Checkpoint thread is interrupted.");
+            }
+          }
+        });
   }
 
   /** Stops event streaming for the pipe. */
@@ -155,8 +178,13 @@ public class Pipe {
    * the last recorded {@link Source} state.
    */
   private synchronized void close() {
-    source.close();
-    destination.close();
+    if (source.isStarted()) {
+      source.close();
+    }
+
+    if (destination.isStarted()) {
+      destination.close();
+    }
 
     checkpoint();
 
@@ -183,13 +211,17 @@ public class Pipe {
     }
 
     public void onError(Throwable error) {
-      close();
+      source.close();
+      destination.close();
+      checkpoint();
     }
   }
 
   final class DestinationListener extends Destination.Listener {
     public void onError(Exception ex) {
+      source.close();
       destination.close();
+      checkpoint();
     }
   }
 }

@@ -4,7 +4,6 @@
  */
 package com.airbnb.spinaltap.common.destination;
 
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -54,7 +53,7 @@ public class BufferedDestinationTest {
 
     bufferedDestination.close();
 
-    assertFalse(bufferedDestination.isStarted());
+    verify(destination).close();
   }
 
   @Test

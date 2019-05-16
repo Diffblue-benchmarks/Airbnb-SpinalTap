@@ -5,12 +5,14 @@
 package com.airbnb.spinaltap.common.source;
 
 import com.airbnb.spinaltap.Mutation;
+import com.airbnb.spinaltap.common.util.ConcurrencyUtil;
 import com.airbnb.spinaltap.common.util.Filter;
 import com.airbnb.spinaltap.common.util.Mapper;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
 
@@ -42,6 +44,7 @@ public abstract class AbstractDataStoreSource<E extends SourceEvent> extends Abs
           try {
             connect();
           } catch (Exception ex) {
+            ConcurrencyUtil.shutdownGracefully(processor, 2, TimeUnit.SECONDS);
             started.set(false);
             metrics.startFailure(ex);
             log.error("Failed to stream events for source " + name, ex);
@@ -51,16 +54,16 @@ public abstract class AbstractDataStoreSource<E extends SourceEvent> extends Abs
 
   @Override
   protected void stop() throws Exception {
-    disconnect();
-
-    if (processor != null) {
-      processor.shutdownNow();
+    if (isRunning()) {
+      ConcurrencyUtil.shutdownGracefully(processor, 2, TimeUnit.SECONDS);
     }
+
+    disconnect();
   }
 
   @Override
   public boolean isStarted() {
-    return started.get() && isRunning();
+    return started.get();
   }
 
   @Override

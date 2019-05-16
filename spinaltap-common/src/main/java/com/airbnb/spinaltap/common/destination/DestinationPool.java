@@ -9,7 +9,6 @@ import static java.util.stream.Collectors.toList;
 
 import com.airbnb.spinaltap.Mutation;
 import com.airbnb.spinaltap.common.util.KeyProvider;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -109,8 +108,8 @@ public final class DestinationPool extends ListenableDestination {
   }
 
   @Override
-  public void open() {
-    Arrays.fill(isActive, false);
+  public synchronized void open() {
+    // Arrays.fill(isActive, false);
     destinations.parallelStream().forEach(Destination::open);
   }
 

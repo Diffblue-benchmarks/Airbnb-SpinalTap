@@ -29,7 +29,7 @@ public class BufferedDestinationTest {
   private final DestinationMetrics metrics = mock(DestinationMetrics.class);
 
   private BufferedDestination bufferedDestination =
-      new BufferedDestination(10, destination, metrics);
+      new BufferedDestination("test", 10, destination, metrics);
 
   @Before
   public void setUp() throws Exception {
